@@ -92,22 +92,7 @@ mod tests {
             }
         }
 
-        fn test_transfer_funds() {
-            let mut blockchain = Blockchain::new(Duration::from_secs(10), None);
-
-
-            // Check if the accounts exist, and create them if they don't
-            if !blockchain.storage.accounts.contains_key("alice") {
-                blockchain.create_account("alice", 1000).unwrap();
-            }
-            if !blockchain.storage.accounts.contains_key("bob") {
-                blockchain.create_account("bob", 500).unwrap();
-            }
-
-            blockchain.transfer("alice", "bob", 200).unwrap();
-            assert_eq!(blockchain.storage.accounts.get("alice").unwrap(), &800);
-            assert_eq!(blockchain.storage.accounts.get("bob").unwrap(), &700);
-        }
+        
 
         #[test]
         fn test_transfer_insufficient_funds() {
@@ -122,7 +107,7 @@ mod tests {
 
         #[test]
         fn test_account_not_found() {
-            let mut blockchain = Blockchain::new(Duration::from_secs(10), None);
+            let  blockchain = Blockchain::new(Duration::from_secs(10), None);
 
             let result = blockchain.balance("nonexistent");
             assert!(result.is_err());
