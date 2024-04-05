@@ -17,22 +17,21 @@ This project is a simple blockchain simulation named 'B'. It demonstrates basic 
 
    ```
    cargo run -- b start-node
-```
+
 2. **Keep this running in a separate terminal window or tab.**
 
-    3. Create an Account 🏦
+3. **Create an Account** 🏦
 
     Creates a new account with a specified starting balance.
 
-    '''
-
-cargo run -- b create-account <id-of-account> <starting-balance>
-'''
+    ```
+    cargo run -- b create-account <id-of-account> <starting-balance>
+    ```
 Replace <id-of-account> with the desired account identifier and <starting-balance> with the initial balance.
 
-3. Transfer Funds 💸
+3. **Transfer Funds** 💸
 
-4. Transfers funds from one account to another.
+4. **Transfers funds from one account to another.**
 
 ```
 
@@ -40,17 +39,16 @@ cargo run -- b transfer <from-account> <to-account> <amount>
 ```
 Replace <from-account> and <to-account> with the respective account identifiers and <amount> with the number of funds to transfer.
 
-5. Check Account Balance 💼
+5. **Check Account Balance** 💼
 
 Displays the balance of the specified account.
 
 ```
-
     cargo run -- b balance <account>
 ```
     Replace <account> with the account identifier whose balance you want to check.
 
-6. 🧪 Running Tests
+6. 🧪**Running Tests**
 
 To run the tests, execute the following command:
 
