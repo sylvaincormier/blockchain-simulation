@@ -1,4 +1,3 @@
-
 use blockchain_simulation::Blockchain;
 use std::env;
 use std::time::Duration;
@@ -8,7 +7,6 @@ fn main() {
 
     // Initialize the blockchain instance outside of the command check
     let mut blockchain = Blockchain::new(Duration::from_secs(10), None);
-
 
     // The first argument should be the program name, and the second should be 'b'
     if args.len() < 2 || args[1] != "b" {
