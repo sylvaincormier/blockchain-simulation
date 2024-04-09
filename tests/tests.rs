@@ -112,27 +112,33 @@ mod tests {
         fn test_transfer_funds() {
             let mut blockchain = create_clean_blockchain();
 
-            blockchain.create_account("alice", 1000).unwrap();
-            blockchain.create_account("bob", 500).unwrap();
+            // Create accounts with initial balances
+            assert!(blockchain.create_account("alice", 1000).is_ok());
+            assert!(blockchain.create_account("bob", 500).is_ok());
 
-            // Process any pending transactions
+            // Mine a block to process account creation transactions
             blockchain.mine_block();
 
-            let transfer_result = blockchain.transfer("alice", "bob", 200);
-            assert!(transfer_result.is_ok(), "Transfer should succeed");
+            // Ensure the initial balances are set correctly
+            assert_eq!(blockchain.balance("alice").unwrap(), 1000);
+            assert_eq!(blockchain.balance("bob").unwrap(), 500);
 
-            // Process the transfer transaction
+            // Perform the transfer
+            assert!(blockchain.transfer("alice", "bob", 200).is_ok());
+
+            // Mine another block to process the transfer transaction
             blockchain.mine_block();
 
+            // Check the balances after the transfer
             assert_eq!(
-                blockchain.storage.accounts.get("alice").unwrap(),
-                &800,
-                "Alice's balance should be 800 after transfer"
+                blockchain.balance("alice").unwrap(),
+                800,
+                "Alice's balance should be 800 after the transfer"
             );
             assert_eq!(
-                blockchain.storage.accounts.get("bob").unwrap(),
-                &700,
-                "Bob's balance should be 700 after transfer"
+                blockchain.balance("bob").unwrap(),
+                700,
+                "Bob's balance should be 700 after the transfer"
             );
         }
 
@@ -227,36 +233,31 @@ mod tests {
                 "Balance should be correctly retrieved"
             );
         }
-
         #[test]
         fn test_process_command_transfer() {
             let mut blockchain = create_clean_blockchain();
 
-            // Create accounts and process their creation
             blockchain.create_account("alice", 1000).unwrap();
             blockchain.create_account("bob", 500).unwrap();
-            blockchain.mine_block(); // Process transactions to update storage
+            blockchain.mine_block(); // Mine to process account creations
 
-            // Execute the transfer command
-            let transfer_amount = 200u64;
-            let result =
-                blockchain.process_command(&format!("transfer alice bob {}", transfer_amount));
-            assert!(result.is_ok(), "Transfer command should succeed");
+            blockchain
+                .process_command("transfer alice bob 200")
+                .unwrap();
+            blockchain.mine_block(); // Mine to process the transfer
 
-            blockchain.mine_block(); // Process the transfer transaction
-
-            // Check the balances after transfer
             assert_eq!(
                 blockchain.storage.accounts.get("alice").unwrap(),
-                &(1000 - transfer_amount),
-                "Alice's balance should be updated after transfer"
+                &800,
+                "Alice's balance should be 800 after transfer"
             );
             assert_eq!(
                 blockchain.storage.accounts.get("bob").unwrap(),
-                &(500 + transfer_amount),
-                "Bob's balance should be updated after transfer"
+                &700,
+                "Bob's balance should be 700 after transfer"
             );
         }
+
         #[test]
         fn test_blockchain_operation() {
             let mut blockchain = create_clean_blockchain();

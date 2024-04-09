@@ -38,7 +38,7 @@ impl Block {
                 .as_secs(),
             transactions,
             prev_block_hash,
-            nonce: 0, // This would be set by the mining process
+            nonce: 0,
         }
     }
 }
@@ -167,32 +167,39 @@ impl Blockchain {
         println!("Starting to mine a new block...");
         let transactions = std::mem::take(&mut self.pending_transactions);
         let prev_block_hash = self.get_last_block_hash();
-        let new_block = Block::new(transactions.clone(), prev_block_hash);
 
         for transaction in &transactions {
             match transaction {
                 Transaction::CreateAccount { id, balance } => {
                     println!("Processing create-account transaction for '{}'", id);
-                    self.storage.accounts.insert(id.clone(), *balance);
+                    // Insert only if the account does not already exist to prevent double processing
+                    self.storage.accounts.entry(id.clone()).or_insert(*balance);
                 }
                 Transaction::Transfer { from, to, amount } => {
-                    println!(
-                        "Processing transfer transaction from '{}' to '{}' for amount {}",
-                        from, to, amount
-                    );
-                    // Here you should update balances or confirm the transaction
+                    if let Some(sender_balance) = self.storage.accounts.get_mut(from) {
+                        if *sender_balance >= *amount {
+                            *sender_balance -= amount;
+                            let receiver_balance =
+                                self.storage.accounts.entry(to.clone()).or_insert(0);
+                            *receiver_balance += amount;
+                        } else {
+                            println!(
+                                "Insufficient funds for transfer from '{}' to '{}'",
+                                from, to
+                            );
+                        }
+                    } else {
+                        println!("Sender account '{}' not found", from);
+                    }
                 }
             }
         }
 
-        self.chain.push(new_block.clone());
-        self.storage.save().expect("Failed to save storage");
-        println!(
-            "Block mined and added to the chain with hash: {}, containing {} transactions",
-            new_block.prev_block_hash, // Assuming this should be the new block's hash
-            transactions.len()
-        );
+        let new_block = Block::new(transactions, prev_block_hash);
+        self.chain.push(new_block);
+        println!("Block mined successfully and added to the chain.");
     }
+
     fn get_last_block_hash(&self) -> String {
         if let Some(last_block) = self.chain.last() {
             // In a real blockchain, this would be a cryptographic hash
@@ -240,13 +247,6 @@ impl Blockchain {
         if *from_balance < amount {
             return Err("Insufficient funds".to_string());
         }
-
-        *from_balance -= amount;
-        let to_balance = self.storage.accounts.entry(to.to_string()).or_insert(0);
-        *to_balance += amount;
-
-        // Save the updated storage
-        self.storage.save()?;
 
         // Create a transfer transaction and add it to the pending transactions list
         let transaction = Transaction::Transfer {
