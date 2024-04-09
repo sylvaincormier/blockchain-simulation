@@ -64,8 +64,6 @@ This command runs all tests in the project, ensuring that the blockchain functio
     main.rs: Entry point of the application that handles the command-line interface.
     lib.rs: Contains the core blockchain logic including account creation, fund transfer, block mining, and balance checking.
 
-## Miscellaneous 🌈
 
-    The simulation is single-threaded and does not include networking or cryptography features.
    
 
