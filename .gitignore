@@ -1,0 +1,45 @@
+# Compiled files
+/target/
+**/*.rs.bk
+
+# Backup files
+*.bk
+*.swp
+*~
+
+# Dependency directory
+**/Cargo.lock
+
+# Environment configuration
+/.env
+
+# IDE specific files
+.idea/
+*.iml
+.vscode/
+*.sublime-workspace
+
+# MacOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+

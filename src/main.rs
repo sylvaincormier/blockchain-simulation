@@ -1,57 +1,46 @@
 use blockchain_simulation::Blockchain;
 use std::env;
+use std::io::Write;
+use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let mut blockchain = Blockchain::new(Duration::from_secs(10), None);
-
-    if args.len() < 2 || args[1] != "b" {
+    if args.len() < 2 {
         print_usage_and_exit();
     }
 
-    match args.get(2).map(String::as_str) {
-        Some("start-node") => {
-            println!("Starting the B blockchain node...");
-            loop {
-                blockchain.mine_block();
-                std::thread::sleep(Duration::from_secs(10));
-            }
-        }
-        Some("create-account") if args.len() == 5 => {
-            let id = &args[3];
-            match args[4].parse::<u64>() {
-                Ok(starting_balance) => {
-                    match blockchain.create_account(id, starting_balance) {
-                        Ok(_) => println!("Account '{}' created with balance {}", id, starting_balance),
-                        Err(e) => println!("Error creating account: {}", e),
+    match args[1].as_str() {
+        "b" => {
+            match args.get(2).map(String::as_str) {
+                Some("start-node") => {
+                    let blockchain = Arc::new(Mutex::new(Blockchain::new(Duration::from_secs(10))));
+                    println!("Starting blockchain node...");
+                    Blockchain::start_node(blockchain);
+                    // Keep the main thread alive to allow mining in the background
+                    loop {
+                        std::thread::sleep(Duration::from_secs(60));
                     }
                 }
-                Err(_) => println!("Error: Starting balance should be a number"),
-            }
-        }
-        Some("transfer") if args.len() == 6 => {
-            let from_account = &args[3];
-            let to_account = &args[4];
-            match args[5].parse::<u64>() {
-                Ok(amount) => {
-                    match blockchain.transfer(from_account, to_account, amount) {
-                        Ok(_) => println!("Transferred {} from '{}' to '{}'", amount, from_account, to_account),
-                        Err(e) => println!("Error transferring funds: {}", e),
-                    }
+                Some("create-account") if args.len() == 5 => {
+                    let command = format!("create-account {} {}", args[3], args[4]);
+                    send_command_to_node(command);
                 }
-                Err(_) => println!("Error: Amount should be a number"),
-            }
-        }
-        Some("list-accounts") => {
-            println!("{}", blockchain.list_accounts());
-        }
-        Some("balance") if args.len() == 4 => {
-            let account = &args[3];
-            match blockchain.balance(account) {
-                Ok(balance) => println!("Balance of '{}': {}", account, balance),
-                Err(e) => println!("Error checking balance: {}", e),
+                Some("transfer") if args.len() == 6 => {
+                    let command = format!("transfer {} {} {}", args[3], args[4], args[5]);
+                    send_command_to_node(command);
+                }
+                Some("list-accounts") => {
+                    let command = "list-accounts".to_string();
+                    send_command_to_node(command);
+                }
+                Some("balance") if args.len() == 4 => {
+                    let command = format!("balance {}", args[3]);
+                    send_command_to_node(command);
+                }
+                _ => print_usage_and_exit(),
             }
         }
         _ => print_usage_and_exit(),
@@ -61,9 +50,27 @@ fn main() {
 fn print_usage_and_exit() {
     println!("Usage:");
     println!("b start-node");
-    println!("b create-account <id-of-account> <starting-balance>");
+    println!("b create-account <id> <balance>");
     println!("b transfer <from-account> <to-account> <amount>");
-    println!("b balance <account>");
     println!("b list-accounts");
+    println!("b balance <account>");
     std::process::exit(1);
+}
+
+fn send_command_to_node(command: String) {
+    let command = command.trim_end(); // Ensure no trailing newline or spaces
+    println!("Sending command: '{}'", command);
+    match TcpStream::connect("127.0.0.1:3000") {
+        Ok(mut stream) => {
+            if let Err(e) = stream.write_all(command.as_bytes()) {
+                println!("Failed to send command: {}", e);
+                return;
+            }
+            stream.flush().expect("Failed to flush the stream");
+        }
+        Err(e) => {
+            println!("Failed to connect: {}", e);
+            return;
+        }
+    }
 }

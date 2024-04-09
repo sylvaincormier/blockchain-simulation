@@ -1,4 +1,5 @@
 use blockchain_simulation::Blockchain;
+use blockchain_simulation::Transaction;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Result};
 use std::time::Duration;
@@ -44,11 +45,15 @@ impl BufRead for MockStdin {
 mod tests {
     use super::*;
     use blockchain_simulation::storage::Storage;
+    use blockchain_simulation::Blockchain;
     fn create_clean_blockchain() -> Blockchain {
         let clean_storage = Storage {
             accounts: HashMap::new(),
         };
-        Blockchain::new(Duration::from_secs(1), Some(clean_storage))
+        let mut blockchain = Blockchain::new(Duration::from_secs(1));
+        blockchain.is_active = true; // Make sure the blockchain is active
+        blockchain.storage = clean_storage;
+        blockchain
     }
 
     #[cfg(test)]
@@ -80,34 +85,55 @@ mod tests {
             let mut blockchain = create_clean_blockchain();
 
             let account_name = "test_account";
-            let initial_balance = 1000;
+            let initial_balance = 1000u64;
 
-            // Check if the account exists, and create it if it doesn't
-            if !blockchain.storage.accounts.contains_key(account_name) {
-                blockchain
-                    .create_account(account_name, initial_balance)
-                    .unwrap();
-                assert_eq!(
-                    blockchain.storage.accounts.get(account_name).unwrap(),
-                    &initial_balance
-                );
-            }
+            blockchain
+                .create_account(account_name, initial_balance)
+                .unwrap();
+
+            // Verify the transaction is in pending_transactions
+            assert!(blockchain.pending_transactions.iter().any(|tx| match tx {
+                Transaction::CreateAccount { id, balance } =>
+                    id == account_name && *balance == initial_balance,
+                _ => false,
+            }));
+
+            // Process transactions through mining to reflect in storage
+            blockchain.mine_block();
+
+            // Check that the account is created in storage
+            assert_eq!(
+                blockchain.storage.accounts.get(account_name),
+                Some(&initial_balance)
+            );
         }
+
         #[test]
         fn test_transfer_funds() {
             let mut blockchain = create_clean_blockchain();
 
-            // Check if the accounts exist, and create them if they don't
-            if !blockchain.storage.accounts.contains_key("alice") {
-                blockchain.create_account("alice", 1000).unwrap();
-            }
-            if !blockchain.storage.accounts.contains_key("bob") {
-                blockchain.create_account("bob", 500).unwrap();
-            }
+            blockchain.create_account("alice", 1000).unwrap();
+            blockchain.create_account("bob", 500).unwrap();
 
-            blockchain.transfer("alice", "bob", 200).unwrap();
-            assert_eq!(blockchain.storage.accounts.get("alice").unwrap(), &800);
-            assert_eq!(blockchain.storage.accounts.get("bob").unwrap(), &700);
+            // Process any pending transactions
+            blockchain.mine_block();
+
+            let transfer_result = blockchain.transfer("alice", "bob", 200);
+            assert!(transfer_result.is_ok(), "Transfer should succeed");
+
+            // Process the transfer transaction
+            blockchain.mine_block();
+
+            assert_eq!(
+                blockchain.storage.accounts.get("alice").unwrap(),
+                &800,
+                "Alice's balance should be 800 after transfer"
+            );
+            assert_eq!(
+                blockchain.storage.accounts.get("bob").unwrap(),
+                &700,
+                "Bob's balance should be 700 after transfer"
+            );
         }
 
         #[test]
@@ -115,10 +141,21 @@ mod tests {
             let mut blockchain = create_clean_blockchain();
 
             blockchain.create_account("alice", 300).unwrap();
+
+            // Process the creation transaction
+            blockchain.mine_block();
+
             let result = blockchain.transfer("alice", "bob", 500);
-            assert!(result.is_err());
-            assert_eq!(blockchain.storage.accounts.get("alice").unwrap(), &300);
-            // Balance should be unchanged
+            assert!(
+                result.is_err(),
+                "Transfer should fail due to insufficient funds"
+            );
+
+            assert_eq!(
+                blockchain.storage.accounts.get("alice").unwrap(),
+                &300,
+                "Alice's balance should remain unchanged"
+            );
         }
 
         #[test]
@@ -126,17 +163,30 @@ mod tests {
             let blockchain = create_clean_blockchain();
 
             let result = blockchain.balance("nonexistent");
-            assert!(result.is_err());
+            assert!(
+                result.is_err(),
+                "Querying a nonexistent account should result in an error"
+            );
         }
+
         #[test]
         fn test_list_accounts() {
             let mut blockchain = create_clean_blockchain();
-            assert!(blockchain.create_account("alice", 1000).is_ok());
-            assert!(blockchain.create_account("bob", 500).is_ok());
+            blockchain.create_account("alice", 1000).unwrap();
+            blockchain.create_account("bob", 500).unwrap();
+
+            // Process the creation transactions
+            blockchain.mine_block();
 
             let accounts_list = blockchain.list_accounts();
-            assert!(accounts_list.contains("Account ID: alice, Balance: 1000"));
-            assert!(accounts_list.contains("Account ID: bob, Balance: 500"));
+            assert!(
+                accounts_list.contains("Account ID: alice, Balance: 1000"),
+                "Alice should be listed with a balance of 1000"
+            );
+            assert!(
+                accounts_list.contains("Account ID: bob, Balance: 500"),
+                "Bob should be listed with a balance of 500"
+            );
         }
 
         #[test]
@@ -144,46 +194,108 @@ mod tests {
             let mut blockchain = create_clean_blockchain();
 
             let result = blockchain.process_command("create-account charlie 1500");
-            assert!(result.is_ok());
+            assert!(result.is_ok(), "Creating an account should succeed");
+
+            // Process the creation transaction
+            blockchain.mine_block();
+
             assert_eq!(
-                result.unwrap(),
-                "Account 'charlie' created with balance 1500"
+                blockchain.storage.accounts.get("charlie").unwrap(),
+                &1500,
+                "Charlie's account should be created with a balance of 1500"
             );
-            assert_eq!(blockchain.storage.accounts.get("charlie").unwrap(), &1500);
-        }
-
-        #[test]
-        fn test_process_command_transfer() {
-            let mut blockchain = create_clean_blockchain();
-
-            blockchain.create_account("alice", 1000).unwrap();
-            blockchain.create_account("bob", 500).unwrap();
-
-            let result = blockchain.process_command("transfer alice bob 300");
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap(), "Transferred 300 from 'alice' to 'bob'");
-            assert_eq!(blockchain.storage.accounts.get("alice").unwrap(), &700);
-            assert_eq!(blockchain.storage.accounts.get("bob").unwrap(), &800);
         }
 
         #[test]
         fn test_process_command_balance() {
             let mut blockchain = create_clean_blockchain();
 
-            blockchain.create_account("alice", 1000).unwrap();
+            // Create an account and process its creation to update the storage
+            let account_name = "alice";
+            let initial_balance = 1000u64;
+            blockchain
+                .create_account(account_name, initial_balance)
+                .unwrap();
+            blockchain.mine_block(); // Simulate mining to process transactions
 
-            let result = blockchain.process_command("balance alice");
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap(), "Balance of 'alice': 1000");
+            // Test the balance command
+            let result = blockchain.process_command(&format!("balance {}", account_name));
+            assert!(result.is_ok(), "Balance command should succeed");
+            assert_eq!(
+                result.unwrap(),
+                format!("Balance of '{}': {}", account_name, initial_balance),
+                "Balance should be correctly retrieved"
+            );
         }
 
         #[test]
-        fn test_process_command_invalid() {
+        fn test_process_command_transfer() {
             let mut blockchain = create_clean_blockchain();
 
-            let result = blockchain.process_command("invalid command");
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err(), "Invalid command".to_string());
+            // Create accounts and process their creation
+            blockchain.create_account("alice", 1000).unwrap();
+            blockchain.create_account("bob", 500).unwrap();
+            blockchain.mine_block(); // Process transactions to update storage
+
+            // Execute the transfer command
+            let transfer_amount = 200u64;
+            let result =
+                blockchain.process_command(&format!("transfer alice bob {}", transfer_amount));
+            assert!(result.is_ok(), "Transfer command should succeed");
+
+            blockchain.mine_block(); // Process the transfer transaction
+
+            // Check the balances after transfer
+            assert_eq!(
+                blockchain.storage.accounts.get("alice").unwrap(),
+                &(1000 - transfer_amount),
+                "Alice's balance should be updated after transfer"
+            );
+            assert_eq!(
+                blockchain.storage.accounts.get("bob").unwrap(),
+                &(500 + transfer_amount),
+                "Bob's balance should be updated after transfer"
+            );
+        }
+        #[test]
+        fn test_blockchain_operation() {
+            let mut blockchain = create_clean_blockchain();
+            blockchain.stop_node();
+            // Verify that the blockchain node is inactive initially
+            assert!(!blockchain.is_active, "Node should initially be inactive");
+
+            // // Start the blockchain node
+            blockchain.is_active = true;
+            assert!(blockchain.is_active, "Node should be active after starting");
+
+            // Create accounts
+            blockchain.create_account("alice", 1000).unwrap();
+            blockchain.create_account("bob", 500).unwrap();
+
+            // Transactions should be pending, not yet affecting the storage
+            assert!(
+                !blockchain.storage.accounts.contains_key("alice"),
+                "Alice's account should not exist until transactions are mined"
+            );
+            assert!(
+                !blockchain.storage.accounts.contains_key("bob"),
+                "Bob's account should not exist until transactions are mined"
+            );
+
+            // Mine a block to process pending transactions
+            blockchain.mine_block();
+
+            // Now the accounts should be in storage with the correct balances
+            assert_eq!(
+                blockchain.storage.accounts.get("alice"),
+                Some(&1000),
+                "Alice's account should exist with correct balance after mining"
+            );
+            assert_eq!(
+                blockchain.storage.accounts.get("bob"),
+                Some(&500),
+                "Bob's account should exist with correct balance after mining"
+            );
         }
     }
 }

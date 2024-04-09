@@ -67,5 +67,5 @@ This command runs all tests in the project, ensuring that the blockchain functio
 ## Miscellaneous 🌈
 
     The simulation is single-threaded and does not include networking or cryptography features.
-    Data is not persisted; restarting the simulation will reset the blockchain.
+   
 
